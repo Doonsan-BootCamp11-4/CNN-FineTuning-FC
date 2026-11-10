@@ -218,3 +218,9 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# checkpoints
+outputs/**/*.pt
+.claude/settings.local.json
+.claude/.headroom_wrap_settings.lock
+.serena
