@@ -25,7 +25,7 @@ CNN-FineTuning-FC/
 │  ├─ lr.py            # EXPERIMENTS: lr / optimizer 실험 목록
 │  ├─ scheduler.py     # EXPERIMENTS: 스케줄러 실험 목록
 │  └─ transform.py     # EXPERIMENTS: 전처리 실험 목록
-├─ src/
+├─ fcft/
 │  ├─ __init__.py
 │  ├─ data.py          # split CSV → Dataset, transform 프리셋, DataLoader
 │  ├─ model.py         # ResNet18 로드, 백본 동결, FC(512→12) 교체
@@ -42,10 +42,10 @@ CNN-FineTuning-FC/
 - config는 dict. 각 실험은 `{**BASE, "name": ..., <바꿀 값>}` 형태.
   - 키: `name`, `lr`, `optimizer`, `scheduler`, `transform`, `epochs`, `batch_size`, `seed`
   - `BASE` 초기값: `lr=1e-3`, `optimizer="adam"`, `scheduler=None`, `transform="basic"`(224 resize + normalize), `epochs=15`, `batch_size=32`, `seed=42`. 1단계 결과를 보고 조정할 수 있다.
-- `src.train.run(config) -> dict`: 학습 후 val 정확도 기준 best 모델을 저장하고, `outputs/<name>/history.json`(epoch별 train/val loss·acc, lr)을 남긴다. test는 평가하지 않는다.
-- `src.evaluate`: 저장된 모델로 test 평가 → `metrics.json`(accuracy, 클래스별 precision/recall/F1, confusion matrix), 학습 곡선·confusion matrix 그림.
-- `src.model.build_model(num_classes=12)`: FC 외 모든 파라미터 `requires_grad=False`.
-- `src.data`: transform 프리셋 이름(문자열)으로 train transform을 고른다. val/test transform은 고정(resize + ImageNet normalize).
+- `fcft.train.run(config) -> dict`: 학습 후 val 정확도 기준 best 모델을 저장하고, `outputs/<name>/history.json`(epoch별 train/val loss·acc, lr)을 남긴다. test는 평가하지 않는다.
+- `fcft.evaluate`: 저장된 모델로 test 평가 → `metrics.json`(accuracy, 클래스별 precision/recall/F1, confusion matrix), 학습 곡선·confusion matrix 그림.
+- `fcft.model.build_model(num_classes=12)`: FC 외 모든 파라미터 `requires_grad=False`.
+- `fcft.data`: transform 프리셋 이름(문자열)으로 train transform을 고른다. val/test transform은 고정(resize + ImageNet normalize).
 
 ## 실행 환경
 
@@ -54,11 +54,11 @@ Kaggle 노트북(GPU). 각 팀원은 공유받은 노트북을 "Copy & Edit"으�
 
 ## 진행 단계와 역할
 
-1. **공통 파이프라인 (3인 함께)**: `src/` 파일을 나눠 작성하고 서로 리뷰한다. 기본 config로 1회 학습이 끝까지 돌면 노트북을 확정해 공유한다.
+1. **공통 파이프라인 (3인 함께)**: `fcft/` 파일을 나눠 작성하고 서로 리뷰한다. 기본 config로 1회 학습이 끝까지 돌면 노트북을 확정해 공유한다.
 2. **축별 실험 (1인 1축)**
    - A: 학습률 / optimizer (`configs/lr.py`)
    - B: 스케줄러 (`configs/scheduler.py`)
-   - C: 전처리 / augmentation (`configs/transform.py`, `src/data.py`의 transform 프리셋)
+   - C: 전처리 / augmentation (`configs/transform.py`, `fcft/data.py`의 transform 프리셋)
    - 규칙: 다른 축은 `BASE` 값 고정, seed·epoch 동일, 비교는 val 성능으로만 한다.
    - 각자 자기 축의 표와 학습 곡선을 보고서 한 섹션으로 쓴다.
 3. **최종 결과 (3인 함께)**: 각 축의 best 설정을 합쳐 최종 모델을 학습하고, test를 이때 한 번만 평가한다. 다른 팀 결과와 비교해 발표자료/보고서를 만든다.
