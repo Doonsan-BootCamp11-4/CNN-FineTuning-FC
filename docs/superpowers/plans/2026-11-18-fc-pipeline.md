@@ -215,7 +215,7 @@ def test_backbone_unchanged(config: dict) -> None:
 
 - [ ] **Step 2: 실패 확인** — `python -m pytest tests/test_train.py -q` → ImportError
 
-- [ ] **Step 3: 구현** — 학습/평가 한 epoch는 `run_epoch(model, loader, criterion, device, optimizer=None) -> tuple[float, float]` 하나로 공유(optimizer가 있으면 학습).
+- [ ] **Step 3: 구현** — 1 epoch는 `run_once_epoch(model, loaders, criterion, device, optimizer) -> dict[str, float]`가 `_train`(학습)과 `_eval`(평가)을 차례로 부른다. optimizer 생성은 `_build_optimizer`, lr 갱신은 `_step_scheduler`로 나눈다.
 
 - [ ] **Step 4: 통과 확인** — `python -m pytest tests -q` → 10 passed
 
