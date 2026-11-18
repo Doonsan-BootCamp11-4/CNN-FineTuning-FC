@@ -18,7 +18,7 @@ from fcft.model import build_model
 def _predict(model: nn.Module, loader: DataLoader, device: torch.device) -> tuple[list[int], list[int]]:
     """loader 전체에 대해 (정답 목록, 예측 목록)을 돌려준다."""
     model.eval()
-    
+
     y_true, y_pred = [], []
     for x, y in loader:
         y_pred += model(x.to(device)).argmax(1).cpu().tolist()
@@ -72,9 +72,15 @@ def evaluate(config: dict) -> dict:
     report = classification_report(
         y_true, y_pred, labels=labels, target_names=classes, output_dict=True, zero_division=0
     )
-    
+
     cm = confusion_matrix(y_true, y_pred, labels=labels).tolist()
-    metrics = {"accuracy": report["accuracy"], "per_class": report, "confusion_matrix": cm}
+    metrics = {
+        "accuracy": sum(t == p for t, p in zip(y_true, y_pred)) / len(y_true),
+        "per_class": {c: report[c] for c in classes},  # 클래스별 precision/recall/f1-score/support
+        "macro_avg": report["macro avg"],  # 클래스 평균 (클래스마다 같은 비중)
+        "weighted_avg": report["weighted avg"],  # 이미지 수로 가중 평균
+        "confusion_matrix": cm,
+    }
     (out_dir / "metrics.json").write_text(json.dumps(metrics, indent=2))
 
     _save_confusion_matrix(cm, classes, out_dir / "confusion_matrix.png")

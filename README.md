@@ -65,3 +65,16 @@ train_transform = T.Compose([
 ```
 
 test 평가는 최종 모델에서 한 번만 한다 (설계 문서 "진행 단계" 참고). 실험 비교는 `history.json`의 val 성능으로 한다.
+
+### 참고
+
+- scheduler는 epoch마다 1번 `step()`한다. `OneCycleLR`처럼 배치마다 step하는 scheduler는 `total_steps=config["epochs"]`로 만든다.
+- 그림은 파일로만 저장된다. 노트북에서 보려면:
+
+  ```python
+  from IPython.display import Image, display
+  display(Image("outputs/sgd_lr0.01/curves.png"))
+  ```
+
+- `git pull`로 코드를 받은 뒤에는 커널을 재시작해야 바뀐 코드가 반영된다 (이미 import한 모듈은 다시 읽지 않는다).
+- `/kaggle/working`의 결과는 세션이 끝나면 사라진다. Save Version이나 다운로드로 `outputs/`를 챙긴다.

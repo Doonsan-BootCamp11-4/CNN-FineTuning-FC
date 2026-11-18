@@ -1,3 +1,4 @@
+import pytest
 from torchvision import transforms as T
 
 from fcft.data import build_loaders
@@ -33,3 +34,11 @@ def test_train_transform_only_on_train(config: dict) -> None:
     loaders = build_loaders(config, train_transform=tf)
     assert next(iter(loaders["train"]))[0].shape[-1] == 64
     assert next(iter(loaders["val"]))[0].shape[-1] == 224
+
+
+# [동등 분할] config의 num_classes를 "CSV 클래스 수와 같음 / 다름" 두 그룹으로 나눈다.
+# 같음 그룹은 위 테스트들이 확인하고, 여기서는 다름 그룹의 대표값(12, 가짜 데이터는 3클래스)으로 에러가 나는지 본다.
+# 다르면 FC 출력 크기와 클래스 번호가 어긋나 학습 중(CUDA assert)이나 평가 때 알아보기 어려운 에러가 난다.
+def test_num_classes_mismatch(config: dict) -> None:
+    with pytest.raises(ValueError):
+        build_loaders({**config, "num_classes": 12})

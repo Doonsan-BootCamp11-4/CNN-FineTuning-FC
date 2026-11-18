@@ -4,6 +4,7 @@ import csv
 from pathlib import Path
 from typing import Callable
 
+import torch
 from PIL import Image
 from torch import Tensor
 from torch.utils.data import DataLoader, Dataset
@@ -17,8 +18,6 @@ EVAL_TRANSFORM = T.Compose(
         T.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
     ]
 )
-
-DEFAULT_TRANSFORM = EVAL_TRANSFORM
 
 
 class SplitDataset(Dataset):
@@ -42,11 +41,12 @@ class SplitDataset(Dataset):
     def __len__(self) -> int:
         return len(self.samples)
 
-    # DataSet클래스는 __getitem__ 메소드 필수 구현
+    # Dataset 클래스는 __getitem__ 메소드 필수 구현
     def __getitem__(self, i: int) -> tuple[Tensor, int]:
         path, label = self.samples[i]
-        # 흑백·RGBA 이미지도 3채널로 맞춘다
-        img = Image.open(self.data_root / path).convert("RGB")
+        # 흑백·RGBA 이미지도 3채널로 맞춘다. with로 열어 읽은 즉시 파일을 닫는다.
+        with Image.open(self.data_root / path) as f:
+            img = f.convert("RGB")
         return self.transform(img), label
 
 
@@ -62,6 +62,12 @@ def build_loaders(
 
     # class set -> list를 통해 정렬
     classes = sorted(set(r["label"] for r in rows))
+    # FC 출력 크기(num_classes)와 실제 클래스 수가 다르면 학습·평가 중 알아보기 어려운 에러가 나므로 미리 막는다
+    if len(classes) != config["num_classes"]:
+        raise ValueError(f"num_classes={config['num_classes']}인데 CSV의 클래스는 {len(classes)}개: {classes}")
+
+    if train_transform is None:
+        train_transform = EVAL_TRANSFORM
 
     loaders = {}
     for split in ("train", "val", "test"):
@@ -71,12 +77,13 @@ def build_loaders(
             [r for r in rows if r["split"] == split],
             config["data_root"],
             classes,
-            (train_transform or DEFAULT_TRANSFORM) if is_train else EVAL_TRANSFORM,
+            train_transform if is_train else EVAL_TRANSFORM,
         )
         loaders[split] = DataLoader(
             dataset,
             batch_size=config["batch_size"],
             shuffle=is_train,
             num_workers=config["num_workers"],
+            pin_memory=torch.cuda.is_available(),  # GPU로 옮기는 속도 향상 (CPU에서는 의미 없어 끔)
         )
     return loaders

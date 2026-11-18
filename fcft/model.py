@@ -10,7 +10,7 @@ def build_model(name: str = "resnet18", num_classes: int = 12) -> nn.Module:
 
     # Feature extractor는 학습 금지를 위한 False 설정
     for p in model.parameters():
-        p.requires_grad= False
+        p.requires_grad = False
 
     # 기존 모델의 분류층 fc 레이어 변경
     model.fc = nn.Linear(model.fc.in_features, num_classes)  # 새로 만든 층은 requires_grad=True

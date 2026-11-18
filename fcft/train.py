@@ -119,7 +119,7 @@ def _step_scheduler(sched: Any, val_loss: float) -> None:
     """epoch 끝에 lr을 갱신한다. ReduceLROnPlateau만 지표(val_loss)를 받는다."""
     if isinstance(sched, ReduceLROnPlateau):
         sched.step(val_loss)
-    elif sched:
+    elif sched is not None:
         sched.step()
 
 

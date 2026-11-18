@@ -10,7 +10,7 @@ BASE = {
     "split_csv": "/kaggle/working/CNN-FineTuning-Dataset-Split/splits/garbage12_602020_seed42.csv",  # train/val/test 분할 CSV (path, label, split)
     "data_root": "/kaggle/input/garbage-classification/garbage_classification",  # CSV의 path가 기준으로 삼는 이미지 루트 폴더
     "out_dir": "outputs",  # 모델(best.pt), history.json, metrics.json, 그래프를 저장할 폴더
-    "num_workers": 2,  # DataLoader가 이미지를 읽을 때 쓰는 프로세스 수
+    "num_workers": 4,  # DataLoader가 이미지를 읽을 때 쓰는 프로세스 수 (Kaggle GPU 노트북은 CPU 4개)
 
     # 모델
     "model": "resnet18",  # 백본 이름 (지금은 resnet18만 지원)
