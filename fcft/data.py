@@ -33,13 +33,16 @@ class SplitDataset(Dataset):
     ) -> None:
         self.data_root = Path(data_root)
         self.classes = classes
+
         class_to_idx = {c: i for i, c in enumerate(classes)}
         self.samples = [(r["path"], class_to_idx[r["label"]]) for r in rows]
+
         self.transform = transform
 
     def __len__(self) -> int:
         return len(self.samples)
 
+    # DataSet클래스는 __getitem__ 메소드 필수 구현
     def __getitem__(self, i: int) -> tuple[Tensor, int]:
         path, label = self.samples[i]
         # 흑백·RGBA 이미지도 3채널로 맞춘다
@@ -48,7 +51,7 @@ class SplitDataset(Dataset):
 
 
 def build_loaders(
-    config: dict, train_transform: Callable | None = DEFAULT_TRANSFORM
+    config: dict, train_transform: Callable | None = None
 ) -> dict[str, DataLoader]:
     """split CSV → {"train", "val", "test"} DataLoader.
 
@@ -68,7 +71,7 @@ def build_loaders(
             [r for r in rows if r["split"] == split],
             config["data_root"],
             classes,
-            train_transform if is_train else EVAL_TRANSFORM,
+            (train_transform or DEFAULT_TRANSFORM) if is_train else EVAL_TRANSFORM,
         )
         loaders[split] = DataLoader(
             dataset,
