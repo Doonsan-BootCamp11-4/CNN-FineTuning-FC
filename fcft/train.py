@@ -134,6 +134,9 @@ def run(
     optimizer: 학습할 파라미터 → Optimizer 를 만드는 함수. None이면 Adam(lr=1e-3).
     scheduler: Optimizer → scheduler 를 만드는 함수. None이면 쓰지 않는다.
     train_transform: train에 쓸 transform. None이면 val/test와 같은 전처리.
+        val/test와 입력 형식을 맞추려면 반드시 Resize((224, 224))·ToTensor()·
+        Normalize(ImageNet 평균/표준편차)를 포함해야 한다. Normalize를 빼도 에러 없이 학습되지만
+        train과 val의 입력 분포가 달라져 val 점수가 낮게 나온다.
     """
     set_seed(config["seed"])
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -158,7 +161,8 @@ def run(
         if m["val_acc"] > best_acc:
             best_acc = m["val_acc"]
             torch.save(model.state_dict(), out_dir / "best.pt")
+        # 매 epoch 저장: 중간에 끊겨도 best.pt와 history.json이 같은 실행의 것으로 남는다
+        (out_dir / "history.json").write_text(json.dumps(history, indent=2))
         _step_scheduler(sched, m["val_loss"])
 
-    (out_dir / "history.json").write_text(json.dumps(history, indent=2))
     return {"name": config["name"], "best_val_acc": best_acc, "out_dir": str(out_dir)}
