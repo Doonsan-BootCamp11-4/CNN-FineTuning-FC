@@ -1,80 +1,82 @@
 # CNN-FineTuning-FC
-FC 레이어만 파인 튜닝
 
-## 로컬 세팅 (테스트용)
+사전학습된 `ResNet18` 백본은 **100% 동결**하고 `FC` 분류 헤드만 학습해 **Garbage Classification(12클래스)** 성능을 비교하는 팀 공통 실험 파이프라인입니다.  
+디스크 특징 캐시(`_feature_cache/`)와 선언형 설정만으로 CPU 환경에서도 빠르게 실험을 반복·비교할 수 있습니다.
 
-로컬에서는 코드가 끝까지 도는지만 확인하고, 실제 학습은 Kaggle에서 한다.
-데이터셋은 받지 않는다. 테스트가 가짜 이미지를 만들어 쓴다.
+- 원격 저장소: `https://github.com/Doonsan-BootCamp11-4/CNN-FineTuning-FC/tree/main`
 
-torch는 CPU 빌드를 먼저 따로 설치한다 (기본 PyPI의 리눅스용 torch는 CUDA 포함이라 크다).
+---
 
+## 1. 프로젝트 구조
+
+```text
+CNN-FineTuning-FC/
+├── configs/    # 실험 정의: axes.py(단일 축), grid.py(정예 16조합), compare.py(단계별 비교)
+├── fcft/       # 공개 PyTorch 파이프라인(data, model, losses, train, evaluate, kfold, report) + bin/(네이티브 가속)
+├── scripts/    # run_experiments.py (통합 CLI 실행기)
+├── notebooks/  # kaggle_fc_pipeline.ipynb (Kaggle CPU 노트북)
+├── docs/       # 아키텍처 · CLI/옵션 레퍼런스 · 확장 가이드
+└── tests/      # 회귀 테스트 4종
+```
+
+---
+
+## 2. 핵심 실측 결과 (`garbage12` 전체 15,515장)
+
+동일 **동결 `ResNet18` + FC 학습** 조건에서의 대표 비교 수치입니다.
+
+| 모델 / 구성 | Pool · Head · Opt | Val Acc | Test Acc | Macro F1 |
+| :--- | :--- | :---: | :---: | :---: |
+| `compare_0_baseline` (기준선) | `avg` · `linear` · `adam` | 0.9455 | 0.9366 | 0.9100 |
+| `1-Shot` 선형 (`0-epoch`, `7.79s`) | `norm_multiscale` · `linear` | 0.9439 | 0.9478 | 0.9297 |
+| `grid_002` (`Residual` 최고) | `norm_multiscale` · `residual` · `adamw` + `CutMix` | 0.9716 | 0.9691 | 0.9585 |
+| **`grid_014` (단일 최고 Test)** | **`norm_multiscale` · `mlp` · `adamw` + `Mixup/CutMix`** | **0.9739** | **0.9723** | **0.9635** |
+| **`ENS2` (`grid_013` + `grid_014`)** | **Top-2 확률 앙상블 + `multiview4` TTA** | - | **0.9729** | **0.9643** |
+
+- **캐시 속도**: `_feature_cache/` 디스크 번들 재로드 **`0.43s`**(전체 100%), Warm 16-Grid 재탐색 **`29.40s`** (`--halving` **`23.69s`**), 캐시 Test 평가 **`0.31~0.48s`**.
+
+---
+
+## 3. 빠른 시작
+
+### 1) 설치 및 테스트 확인
 ```bash
-py -3.12 -m venv .venv
-.venv\Scripts\activate          # macOS/Linux: source .venv/bin/activate
-pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
-pip install -r requirements.txt
-python -m pytest tests -q
+# Linux / macOS
+python3 -m venv .venv && .venv/bin/python -m pip install -r requirements.txt
+.venv/bin/python -m pytest tests -q
+
+# Windows
+py -3.12 -m venv .venv && .venv\Scripts\python -m pip install -r requirements.txt
+.venv\Scripts\python -m pytest tests -q
 ```
 
-VS Code에서는 `Tasks: Run Task` → `venv: setup`으로 venv 생성과 설치를 한 번에 할 수 있다.
+### 2) 실험 실행 순서
+```bash
+# 1. split CSV 및 이미지 경로 점검
+python scripts/run_experiments.py --check-split --check-files
 
-## Kaggle에서 학습
+# 2. 정예 16조합 Grid Search (공유 캐시 + CPU 자동 병렬)
+python scripts/run_experiments.py --axis grid --shared-cache --out-dir outputs_grid
 
-노트북에 Garbage Classification 데이터셋을 추가하고, GPU와 Internet을 켠 뒤 아래 순서로 셀을 실행한다.
+# (선택) 공용 특징 캐시 1회 내보내기 및 마운트 재사용 (Kaggle Dataset / 팀 공유)
+python scripts/run_experiments.py --axis grid --export-cache fc_cache_grid.pt
+python scripts/run_experiments.py --axis grid --shared-cache --cache-file fc_cache_grid.pt --out-dir outputs_grid
 
-```python
-# 0) split CSV 받기
-#    폴더 이름은 BASE["split_csv"] 경로와 정확히 같아야 한다:
-#    /kaggle/working/CNN-FineTuning-Dataset-Split/splits/garbage12_602020_seed42.csv
-!git clone <CNN-FineTuning-Dataset-Split 저장소 주소> /kaggle/working/CNN-FineTuning-Dataset-Split || git -C /kaggle/working/CNN-FineTuning-Dataset-Split pull
+# 3. 원하는 기법만 골라 단일 학습 + 즉시 Test 평가 (--list-options로 선택지 확인)
+python scripts/run_experiments.py --single --head mlp --mix both --loss focal_g2.0_ls --out-dir outputs_single
 
-# 1) 저장소 받기 (이미 있으면 최신으로)
-!git clone https://github.com/Doonsan-BootCamp11-4/CNN-FineTuning-FC.git /kaggle/working/CNN-FineTuning-FC || git -C /kaggle/working/CNN-FineTuning-FC pull
-
-# 2) import 경로 추가
-import sys
-sys.path.insert(0, "/kaggle/working/CNN-FineTuning-FC")
-
-# 3) config 만들고 학습 → test 평가
-import torch
-from configs.base import BASE
-from fcft.train import run
-from fcft.evaluate import evaluate
-
-config = {**BASE, "name": "sgd_lr0.01"}
-run(
-    config,
-    optimizer=lambda params: torch.optim.SGD(params, lr=0.01, momentum=0.9),  # 안 넘기면 Adam(lr=1e-3)
-    scheduler=lambda opt: torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=config["epochs"]),  # 안 넘기면 없음
-    # train_transform=...,  # 안 넘기면 val/test와 같은 전처리 (아래 주의 참고)
-)
-evaluate(config)  # outputs/<name>/ 에 metrics.json, confusion_matrix.png, curves.png
+# 4. 단일 축 비교 (loss / activation / compare / lr / scheduler / transform)
+python scripts/run_experiments.py --axis loss --shared-cache --out-dir outputs_loss
 ```
+- **Kaggle 노트북**: [`notebooks/kaggle_fc_pipeline.ipynb`](notebooks/kaggle_fc_pipeline.ipynb)를 Kaggle에 올려 순서대로 실행하면 CPU 런타임 기준으로 표와 학습 곡선까지 한 번에 확인할 수 있습니다.
 
-`train_transform`을 직접 만들 때는 augmentation 뒤에 반드시 val/test와 같은 형식을 맞춘다.
-Normalize를 빼도 에러 없이 학습되지만 val 점수가 낮게 나와 실험 비교가 틀려진다.
+---
 
-```python
-from torchvision import transforms as T
-train_transform = T.Compose([
-    T.RandomHorizontalFlip(),                                         # 실험할 augmentation
-    T.Resize((224, 224)),                                             # 필수
-    T.ToTensor(),                                                     # 필수
-    T.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),        # 필수 (ImageNet 평균/표준편차)
-])
-```
+## 4. 파이프라인 핵심 구성 & 세부 문서
 
-test 평가는 최종 모델에서 한 번만 한다 (설계 문서 "진행 단계" 참고). 실험 비교는 `history.json`의 val 성능으로 한다.
-
-### 참고
-
-- scheduler는 epoch마다 1번 `step()`한다. `OneCycleLR`처럼 배치마다 step하는 scheduler는 `total_steps=config["epochs"]`로 만든다.
-- 그림은 파일로만 저장된다. 노트북에서 보려면:
-
-  ```python
-  from IPython.display import Image, display
-  display(Image("outputs/sgd_lr0.01/curves.png"))
-  ```
-
-- `git pull`로 코드를 받은 뒤에는 커널을 재시작해야 바뀐 코드가 반영된다 (이미 import한 모듈은 다시 읽지 않는다).
-- `/kaggle/working`의 결과는 세션이 끝나면 사라진다. Save Version이나 다운로드로 `outputs/`를 챙긴다.
+| 구분 | 기본 전략 (`configs/grid.py`) | 세부 문서 |
+| :--- | :--- | :--- |
+| **전처리 · 캐시** | EXIF 자동 정렬, `squash` 리사이즈, `norm_multiscale`(768D) + `3x AugBank` 디스크 캐시 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) |
+| **정규화 · 헤드** | `Power-L2`(선택: `center_power_l2`, `center_std_power`), `residual`/`mlp`, 1-Shot 초기화 + `head_lr_scale` | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) |
+| **손실 · 학습 · 기법 설명** | `CutMix`/`Mixup`, `InvSqrt` ↔ `LogitAdj` 상호 배타 보정, `AdamW`/`Calibrated` + `WarmupCosine` + `SWA` | [`docs/EXPERIMENTS_GUIDE.md`](docs/EXPERIMENTS_GUIDE.md) |
+| **평가 · 확장** | `val` 기준 탐색 후 최종 모델만 `test` 1회 평가(`flip2`/`multiview4` TTA), K-Fold CV 지원 | [`docs/CONTRIBUTING.md`](docs/CONTRIBUTING.md) |
