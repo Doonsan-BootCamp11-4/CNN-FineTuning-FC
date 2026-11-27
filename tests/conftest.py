@@ -1,52 +1,65 @@
-"""테스트용 가짜 데이터셋: 3클래스 × 4장(train, train, val, test) = 12장.
-
-conftest.py는 pytest가 자동으로 읽는 파일이다. 여기 정의한 fixture는
-tests/ 안의 모든 테스트에서 import 없이 인자 이름(config)만 적으면 받아 쓸 수 있다.
-"""
-from __future__ import annotations
+"""Shared pytest fixtures creating a temporary 12-image stratified fake dataset."""
 
 import csv
+import sys
 from pathlib import Path
-
-import pytest
 from PIL import Image
+import pytest
 
-from configs.base import BASE
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from configs.axes import BASE  # noqa: E402
 
 
 @pytest.fixture
-def config(tmp_path: Path) -> dict:
-    # tmp_path: pytest가 테스트마다 새로 만들어 주는 임시 폴더.
-    # 테스트끼리 파일(이미지, best.pt 등)을 공유하지 않으므로 서로 영향을 주지 않는다.
-
-    # 1) 가짜 이미지 만들기: <tmp_path>/<클래스>/<번호>.jpg
-    rows = []  # split CSV에 쓸 행 목록
-    for label in ("glass", "paper", "plastic"):
-        (tmp_path / label).mkdir()
-        # 클래스마다 4장: 0,1번은 train / 2번은 val / 3번은 test
-        for i, split in enumerate(("train", "train", "val", "test")):
-            path = f"{label}/{i}.jpg"  # data_root 기준 상대 경로 (실제 CSV와 같은 형식)
-            # paper/0.jpg는 흑백 이미지 (실제 데이터셋에 RGB가 아닌 이미지가 섞여 있을 수 있음)
-            mode = "L" if path == "paper/0.jpg" else "RGB"
-            Image.new(mode, (40, 30), 100).save(tmp_path / path)  # 40×30 단색 이미지
-            rows.append({"path": path, "label": label, "split": split})
-
-    # 2) split CSV 쓰기: 실제 split CSV와 같은 컬럼(path, label, split)
+def fake_dataset(tmp_path: Path) -> dict:
+    """Create 12 synthetic images (3 classes x 4, including 1 grayscale) + split CSV and config."""
+    data_root = tmp_path / "images"
+    out_dir = tmp_path / "outputs"
     csv_path = tmp_path / "split.csv"
-    with open(csv_path, "w", newline="", encoding="utf-8") as f:
+
+    # Unsorted order intentionally verifies alphabetical class sorting in build_loaders.
+    classes = ["paper", "cardboard", "glass"]
+    splits_per_class = ["train", "train", "val", "test"]
+    rows = []
+
+    for cls_idx, cls_name in enumerate(classes):
+        cls_dir = data_root / cls_name
+        cls_dir.mkdir(parents=True, exist_ok=True)
+        for j, split in enumerate(splits_per_class):
+            img_name = f"{cls_name}_{j}.png"
+            img_path = cls_dir / img_name
+            if cls_name == "glass" and j == 0:
+                img = Image.new("L", (32, 32), color=80 + cls_idx * 40)
+            else:
+                img = Image.new("RGB", (32, 32), color=(40 * (cls_idx + 1), 30 * (j + 1), 120))
+            img.save(img_path)
+            rows.append({"path": f"{cls_name}/{img_name}", "label": cls_name, "split": split})
+
+    with csv_path.open("w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=["path", "label", "split"])
         writer.writeheader()
         writer.writerows(rows)
 
-    # 3) BASE를 복사하고 테스트에 맞게 덮어쓴 config를 돌려준다
-    return {
+    config = {
         **BASE,
-        "name": "smoke",  # 결과 폴더 이름: <out_dir>/smoke/
-        "epochs": 1,  # 끝까지 도는지만 보면 되므로 1번만
-        "batch_size": 2,  # 이미지가 적으니 작게
-        "num_workers": 0,  # Windows에서 worker 프로세스 문제 회피 (메인 프로세스에서 읽음)
-        "num_classes": 3,  # 가짜 데이터의 클래스 수
-        "split_csv": str(csv_path),  # 위에서 만든 CSV
-        "data_root": str(tmp_path),  # CSV의 path 기준 폴더
-        "out_dir": str(tmp_path / "out"),  # 결과도 임시 폴더에 저장 (저장소의 outputs/를 더럽히지 않음)
+        "name": "test_run",
+        "split_csv": str(csv_path),
+        "data_root": str(data_root),
+        "out_dir": str(out_dir),
+        "num_classes": 3,
+        "num_workers": 0,
+        "epochs": 1,
+        "batch_size": 2,
+        "seed": 42,
+    }
+    return {
+        "config": config,
+        "csv_path": csv_path,
+        "data_root": data_root,
+        "out_dir": out_dir,
+        "classes_sorted": sorted(classes),
+        "grayscale_rel": "glass/glass_0.png",
     }
